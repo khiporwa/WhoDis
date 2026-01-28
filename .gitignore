@@ -1,0 +1,8 @@
+
+node_modules
+dist
+.env
+screenshots/*
+!screenshots/.gitkeep
+.DS_Store
+*.local

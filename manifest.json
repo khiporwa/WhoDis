@@ -1,0 +1,23 @@
+
+{
+  "short_name": "WhoDis",
+  "name": "WhoDis: Anonymous High Performance Chat",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3661/3661331.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3661/3661331.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0a0a0a",
+  "display": "standalone",
+  "scope": "/",
+  "theme_color": "#0a0a0a",
+  "description": "Anonymous video and text chat platform."
+}

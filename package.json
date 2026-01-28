@@ -1,0 +1,38 @@
+
+{
+  "name": "nexus-stream",
+  "version": "1.0.0",
+  "description": "High-Performance Anonymous Video/Chat Platform",
+  "main": "server.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "server": "tsx server.ts",
+    "start": "tsx server.ts"
+  },
+  "dependencies": {
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "zustand": "^5.0.10",
+    "@google/genai": "^1.38.0",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3",
+    "express": "^5.2.1",
+    "cors": "^2.8.5",
+    "multer": "^2.0.2",
+    "tsx": "^4.19.2",
+    "html2canvas": "^1.4.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/express": "^5.0.0",
+    "@types/cors": "^2.8.17",
+    "@types/node": "^22.10.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.0.0",
+    "typescript": "^5.7.0"
+  }
+}

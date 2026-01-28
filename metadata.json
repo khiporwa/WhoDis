@@ -1,0 +1,9 @@
+
+{
+  "name": "WhoDis",
+  "description": "A high-performance anonymous video and text chat platform with multi-theme support, safety-first features, and instant matching.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
