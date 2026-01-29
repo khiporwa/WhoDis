@@ -8,6 +8,7 @@ import { ChatMode, Message } from '../types';
 import { Icons, APP_CONFIG, UI_TEXT, THEMES } from '../constants';
 import { captureAndUploadScreenshot } from '../services/screenshotService';
 import { ThemeSwitcher } from './ThemeSwitcher';
+import { getIcebreakerPrompt } from '../services/gemini';
 
 export const ChatSession: React.FC = () => {
   const { 
@@ -31,6 +32,7 @@ export const ChatSession: React.FC = () => {
     stopTracks, 
     setConnectionState, 
     connectionState,
+    iceState,
     isMuted,
     isVideoOff,
     toggleAudio,
@@ -48,6 +50,7 @@ export const ChatSession: React.FC = () => {
   const [strangerName, setStrangerName] = useState<string>('Stranger');
   const [currentSessionId, setCurrentSessionId] = useState<string>('');
   const [logoClicks, setLogoClicks] = useState(0);
+  const [isGeneratingIcebreaker, setIsGeneratingIcebreaker] = useState(false);
   
   const themeData = THEMES[currentTheme];
   const primaryColorClass = `text-${themeData.primary}`;
@@ -55,15 +58,19 @@ export const ChatSession: React.FC = () => {
   const textColorClass = themeData.isLight ? 'text-neutral-900' : 'text-white';
   const primaryGlowShadow = themeData.isLight ? '' : `shadow-[0_0_12px_${themeData.glow}]`;
 
-  // Use a ref for the timer to ensure stability across re-renders
   const captureTimerRef = useRef<number | null>(null);
+  const lastActivityRef = useRef<number>(Date.now());
+  const icebreakerTriggeredRef = useRef<boolean>(false);
 
   useEffect(() => {
     if (socket) {
-      socket.on('chat-message', (data: { text: string }) => {
+      socket.on('chat-message', (data: { text: string, isIcebreaker?: boolean }) => {
+        lastActivityRef.current = Date.now();
+        icebreakerTriggeredRef.current = false;
+        
         setMessages(prev => [...prev, {
           id: Date.now().toString(),
-          sender: 'stranger',
+          sender: data.isIcebreaker ? 'system' : 'stranger',
           text: data.text,
           timestamp: Date.now()
         }]);
@@ -74,6 +81,38 @@ export const ChatSession: React.FC = () => {
       });
     }
   }, [socket]);
+
+  // Icebreaker Silence Detection Logic
+  useEffect(() => {
+    if (connectionState !== 'connected' || simulatedVideoUrl) return;
+
+    const interval = setInterval(async () => {
+      const now = Date.now();
+      const idleTime = now - lastActivityRef.current;
+
+      if (idleTime > APP_CONFIG.ICEBREAKER_SILENCE_TIMEOUT && !icebreakerTriggeredRef.current && !isGeneratingIcebreaker) {
+        icebreakerTriggeredRef.current = true;
+        setIsGeneratingIcebreaker(true);
+        
+        console.debug("[Icebreaker] Silence detected. Generating prompt...");
+        const sharedInterests = [...user.interests, ...(partnerData?.interests || [])];
+        const prompt = await getIcebreakerPrompt(sharedInterests);
+        
+        if (socket && roomId) {
+          socket.emit('chat-message', { roomId, text: `💡 Icebreaker: ${prompt}`, isIcebreaker: true });
+          setMessages(prev => [...prev, {
+            id: 'ice-' + Date.now(),
+            sender: 'system',
+            text: `💡 Icebreaker: ${prompt}`,
+            timestamp: Date.now()
+          }]);
+        }
+        setIsGeneratingIcebreaker(false);
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [connectionState, user.interests, partnerData, socket, roomId, isGeneratingIcebreaker, simulatedVideoUrl]);
 
   const handleLogoClick = () => {
     const newClicks = logoClicks + 1;
@@ -90,13 +129,13 @@ export const ChatSession: React.FC = () => {
     if (connectionState === 'connected') {
       const id = `session_${Math.random().toString(36).substr(2, 9)}_${Date.now()}`;
       setCurrentSessionId(id);
-      console.debug(`[ChatSession] Match connected. Assigned Monitoring ID: ${id}`);
+      lastActivityRef.current = Date.now();
+      icebreakerTriggeredRef.current = false;
     } else {
       setCurrentSessionId('');
     }
   }, [connectionState]);
 
-  // STABLE CAPTURE LOOP
   useEffect(() => {
     const isReady = connectionState === 'connected' && currentSessionId && safetyScreenshotsEnabled;
     
@@ -112,7 +151,6 @@ export const ChatSession: React.FC = () => {
       const delay = Math.floor(Math.random() * (screenshotIntervalMax - screenshotIntervalMin + 1)) + screenshotIntervalMin;
       
       captureTimerRef.current = window.setTimeout(async () => {
-        // Double check state before capturing
         if (safetyScreenshotsEnabled && connectionState === 'connected') {
           await captureAndUploadScreenshot(currentSessionId);
         }
@@ -147,6 +185,9 @@ export const ChatSession: React.FC = () => {
   }, [stopTracks]);
 
   const handleSendMessage = (text: string) => {
+    lastActivityRef.current = Date.now();
+    icebreakerTriggeredRef.current = false;
+
     if (simulatedVideoUrl) {
       const newMsg: Message = { id: Date.now().toString(), sender: 'me', text, timestamp: Date.now() };
       setMessages(prev => [...prev, newMsg]);
@@ -216,12 +257,9 @@ export const ChatSession: React.FC = () => {
             </div>
           )}
 
-          {devMode && (
-            <div className={`flex items-center gap-2 px-3 py-1 rounded-full border animate-in fade-in zoom-in duration-300 ${themeData.isLight ? 'bg-neutral-100 border-neutral-200' : 'bg-white/5 border-white/10'}`}>
-              <div className={`w-1.5 h-1.5 rounded-full ${safetyScreenshotsEnabled ? primaryBgClass : 'bg-neutral-600'}`} />
-              <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">
-                DEV: {safetyScreenshotsEnabled ? UI_TEXT.dev.activeIndicator : UI_TEXT.dev.disabledIndicator}
-              </span>
+          {isGeneratingIcebreaker && (
+            <div className={`px-3 py-1 border rounded-full text-[10px] font-black uppercase tracking-[0.2em] animate-pulse bg-purple-500/10 border-purple-500/30 text-purple-400`}>
+              AI Thinking...
             </div>
           )}
         </div>
@@ -237,7 +275,7 @@ export const ChatSession: React.FC = () => {
       <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-4 gap-4 md:gap-6 overflow-hidden">
         <div className={`lg:col-span-3 flex flex-col gap-4 relative min-h-0 ${selectedMode === ChatMode.TEXT ? 'hidden lg:flex' : ''}`}>
           <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <VideoContainer stream={remoteStream} videoUrl={simulatedVideoUrl} label={strangerName} isRemote />
+            <VideoContainer stream={remoteStream} videoUrl={simulatedVideoUrl} label={strangerName} isRemote iceState={iceState} />
             <VideoContainer stream={localStream} label="You" muted isVideoOff={isVideoOff} />
           </div>
 
@@ -254,14 +292,6 @@ export const ChatSession: React.FC = () => {
                   <h3 className={`text-2xl font-black mb-2 uppercase tracking-tighter ${textColorClass}`}>{UI_TEXT.chat.matchingTitle}</h3>
                   <p className="text-neutral-500 text-sm">{UI_TEXT.chat.matchingDesc}</p>
                 </div>
-                {devMode && (
-                  <button 
-                    onClick={handleSimulateMatch}
-                    className={`mt-4 px-6 py-2 rounded-full border transition-all active:scale-95 text-[10px] font-black uppercase tracking-[0.2em] ${themeData.isLight ? 'bg-neutral-100 hover:bg-neutral-200 text-neutral-600 border-neutral-200' : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-400 border-white/10'}`}
-                  >
-                    Simulate Match (Admin Tool)
-                  </button>
-                )}
               </div>
             </div>
           )}
