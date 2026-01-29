@@ -18,8 +18,49 @@ export const useWebRTC = () => {
   const localStreamRef = useRef<MediaStream | null>(null);
   const peerConnection = useRef<RTCPeerConnection | null>(null);
   const roomIdRef = useRef<string | null>(null);
+  const signalQueue = useRef<any[]>([]);
+  const pendingCandidates = useRef<RTCIceCandidateInit[]>([]);
 
   const { user } = useAppStore();
+
+  const processSignal = useCallback(async (data: any) => {
+    if (!peerConnection.current) return;
+
+    try {
+      if (data.signal.type === 'offer') {
+        console.log('[WebRTC] Processing Offer');
+        await peerConnection.current.setRemoteDescription(new RTCSessionDescription(data.signal));
+        const answer = await peerConnection.current.createAnswer();
+        await peerConnection.current.setLocalDescription(answer);
+        socketRef.current?.emit('signal', { roomId: data.roomId, signal: peerConnection.current.localDescription });
+        
+        // Process any candidates that arrived while waiting for the offer
+        while (pendingCandidates.current.length > 0) {
+          const cand = pendingCandidates.current.shift();
+          if (cand) await peerConnection.current.addIceCandidate(new RTCIceCandidate(cand));
+        }
+      } else if (data.signal.type === 'answer') {
+        console.log('[WebRTC] Processing Answer');
+        await peerConnection.current.setRemoteDescription(new RTCSessionDescription(data.signal));
+        
+        // Process any candidates that arrived while waiting for the answer
+        while (pendingCandidates.current.length > 0) {
+          const cand = pendingCandidates.current.shift();
+          if (cand) await peerConnection.current.addIceCandidate(new RTCIceCandidate(cand));
+        }
+      } else if (data.signal.candidate) {
+        if (peerConnection.current.remoteDescription) {
+          console.log('[WebRTC] Adding ICE Candidate');
+          await peerConnection.current.addIceCandidate(new RTCIceCandidate(data.signal.candidate));
+        } else {
+          console.log('[WebRTC] Queuing ICE Candidate (no remote desc)');
+          pendingCandidates.current.push(data.signal.candidate);
+        }
+      }
+    } catch (e) {
+      console.error('[WebRTC] Signal Processing Error:', e);
+    }
+  }, []);
 
   // Initialize Socket
   useEffect(() => {
@@ -31,33 +72,16 @@ export const useWebRTC = () => {
       setPartnerData(partner);
       setConnectionState('connecting');
       
-      // Crucial: Wait a small moment to ensure localStreamRef is populated if just started
       await createPeerConnection(roomId, isInitiator);
     });
 
     socketRef.current.on('signal', async (data) => {
       if (!peerConnection.current) {
-        console.warn('[WebRTC] Signal received but no PeerConnection exists yet.');
+        console.debug('[WebRTC] Signal received but no PeerConnection yet. Queuing.');
+        signalQueue.current.push(data);
         return;
       }
-      
-      try {
-        if (data.signal.type === 'offer') {
-          console.log('[WebRTC] Received Offer');
-          await peerConnection.current.setRemoteDescription(new RTCSessionDescription(data.signal));
-          const answer = await peerConnection.current.createAnswer();
-          await peerConnection.current.setLocalDescription(answer);
-          socketRef.current?.emit('signal', { roomId: data.roomId, signal: peerConnection.current.localDescription });
-        } else if (data.signal.type === 'answer') {
-          console.log('[WebRTC] Received Answer');
-          await peerConnection.current.setRemoteDescription(new RTCSessionDescription(data.signal));
-        } else if (data.signal.candidate) {
-          console.log('[WebRTC] Received ICE Candidate');
-          await peerConnection.current.addIceCandidate(new RTCIceCandidate(data.signal.candidate || data.signal));
-        }
-      } catch (e) {
-        console.error('[WebRTC] Signaling Error:', e);
-      }
+      await processSignal(data);
     });
 
     socketRef.current.on('partner-disconnected', () => {
@@ -70,7 +94,7 @@ export const useWebRTC = () => {
     return () => {
       socketRef.current?.disconnect();
     };
-  }, []);
+  }, [processSignal]);
 
   const createPeerConnection = async (roomId: string, isInitiator: boolean) => {
     if (peerConnection.current) {
@@ -120,6 +144,12 @@ export const useWebRTC = () => {
         }
       }
     };
+
+    // Process queued signals now that PC exists
+    while (signalQueue.current.length > 0) {
+      const queued = signalQueue.current.shift();
+      await processSignal(queued);
+    }
 
     if (isInitiator) {
       try {
@@ -197,6 +227,8 @@ export const useWebRTC = () => {
       socketRef.current?.emit('leave-match', roomIdRef.current);
       roomIdRef.current = null;
     }
+    signalQueue.current = [];
+    pendingCandidates.current = [];
     setRemoteStreamState(null);
     setSimulatedVideoUrl(null);
     setPartnerData(null);
