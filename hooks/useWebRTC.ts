@@ -43,13 +43,16 @@ export const useWebRTC = () => {
       
       try {
         if (data.signal.type === 'offer') {
+          console.log('[WebRTC] Received Offer');
           await peerConnection.current.setRemoteDescription(new RTCSessionDescription(data.signal));
           const answer = await peerConnection.current.createAnswer();
           await peerConnection.current.setLocalDescription(answer);
           socketRef.current?.emit('signal', { roomId: data.roomId, signal: peerConnection.current.localDescription });
         } else if (data.signal.type === 'answer') {
+          console.log('[WebRTC] Received Answer');
           await peerConnection.current.setRemoteDescription(new RTCSessionDescription(data.signal));
         } else if (data.signal.candidate) {
+          console.log('[WebRTC] Received ICE Candidate');
           await peerConnection.current.addIceCandidate(new RTCIceCandidate(data.signal.candidate || data.signal));
         }
       } catch (e) {
@@ -83,7 +86,7 @@ export const useWebRTC = () => {
     peerConnection.current = pc;
     setIceState(pc.iceConnectionState);
 
-    // Add local tracks
+    // Add local tracks BEFORE creating offer
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => {
         pc.addTrack(track, localStreamRef.current!);
@@ -97,7 +100,7 @@ export const useWebRTC = () => {
     };
 
     pc.ontrack = (event) => {
-      console.log('[WebRTC] Received Remote Track');
+      console.log('[WebRTC] Received Remote Track', event.streams[0]);
       setRemoteStreamState(event.streams[0]);
       setConnectionState('connected');
     };
@@ -110,7 +113,6 @@ export const useWebRTC = () => {
       if (state === 'connected' || state === 'completed') {
         setConnectionState('connected');
       } else if (state === 'disconnected' || state === 'failed' || state === 'closed') {
-        // Only trigger rematching if we were previously connected
         if (connectionState === 'connected' || connectionState === 'connecting') {
            cleanup();
            setConnectionState('matching');
@@ -121,7 +123,11 @@ export const useWebRTC = () => {
 
     if (isInitiator) {
       try {
-        const offer = await pc.createOffer();
+        console.log('[WebRTC] Creating Offer');
+        const offer = await pc.createOffer({
+           offerToReceiveAudio: true,
+           offerToReceiveVideo: true
+        });
         await pc.setLocalDescription(offer);
         socketRef.current?.emit('signal', { roomId, signal: pc.localDescription });
       } catch (e) {
