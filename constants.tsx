@@ -108,17 +108,28 @@ export const APP_CONFIG = {
   ICEBREAKER_SILENCE_TIMEOUT: 10000,
   BLUR_DURATION_MS: 5000,
   
-  // Robust ICE Servers for production stability
-  // Using a mix of high-reliability STUN servers and public relay candidates
+  // WebRTC Configuration
+  // To fix Mobile Data (4G/5G) connectivity, you NEED a TURN server.
+  // Recommended: Get free credentials from Metered.ca or Twilio.
   ICE_SERVERS: [
+    // Standard Google STUNs
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
     { urls: 'stun:stun3.l.google.com:19302' },
     { urls: 'stun:stun4.l.google.com:19302' },
+    
+    // Twilio Public STUN
     { urls: 'stun:global.stun.twilio.com:3478' },
-    // Public free TURN relay candidates - essential for mobile networks
-    { urls: 'stun:stun.relay.metered.ca:80' }
+
+    /* 
+    // EXAMPLE: ADD YOUR TURN SERVER HERE (REQUIRED FOR MOBILE DATA)
+    {
+      urls: "turn:your-turn-server.com:3478",
+      username: "your-username",
+      credential: "your-password"
+    }
+    */
   ],
 
   ALLOW_SIMULATION: true,
