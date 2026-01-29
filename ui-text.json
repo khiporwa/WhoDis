@@ -1,9 +1,9 @@
 
 {
   "common": {
-    "siteName": "NexusStream",
-    "siteNamePrefix": "Nexus",
-    "siteNameSuffix": "Stream",
+    "siteName": "WhosDis",
+    "siteNamePrefix": "Whos",
+    "siteNameSuffix": "Dis",
     "loading": "Loading...",
     "report": "Report",
     "cancel": "Cancel",
