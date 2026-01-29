@@ -10,6 +10,7 @@ interface VideoContainerProps {
   label: string;
   isRemote?: boolean;
   isVideoOff?: boolean;
+  iceState?: string;
 }
 
 export const VideoContainer: React.FC<VideoContainerProps> = ({ 
@@ -18,11 +19,13 @@ export const VideoContainer: React.FC<VideoContainerProps> = ({
   muted, 
   label, 
   isRemote, 
-  isVideoOff 
+  isVideoOff,
+  iceState
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const safetyBlurEnabled = useAppStore((state) => state.safetyBlurEnabled);
+  const devMode = useAppStore((state) => state.devMode);
   const [isBlurring, setIsBlurring] = useState(isRemote && safetyBlurEnabled);
 
   useEffect(() => {
@@ -88,9 +91,20 @@ export const VideoContainer: React.FC<VideoContainerProps> = ({
           </div>
         </div>
       )}
-      <div className="absolute top-4 left-4 flex items-center gap-2 pointer-events-none z-10">
-        <div className="px-3 py-1 bg-black/40 backdrop-blur-md rounded-full text-[10px] font-bold uppercase tracking-wider text-white/80 ring-1 ring-white/10">{label}</div>
-        {isBlurring && isRemote && <div className="px-3 py-1 bg-cyan-500/20 backdrop-blur-md rounded-full text-[10px] font-bold uppercase tracking-wider text-cyan-400 ring-1 ring-cyan-500/50 animate-pulse">Safety Blur</div>}
+      <div className="absolute top-4 left-4 flex flex-col gap-2 pointer-events-none z-10">
+        <div className="flex items-center gap-2">
+          <div className="px-3 py-1 bg-black/40 backdrop-blur-md rounded-full text-[10px] font-bold uppercase tracking-wider text-white/80 ring-1 ring-white/10">{label}</div>
+          {isBlurring && isRemote && <div className="px-3 py-1 bg-cyan-500/20 backdrop-blur-md rounded-full text-[10px] font-bold uppercase tracking-wider text-cyan-400 ring-1 ring-cyan-500/50 animate-pulse">Safety Blur</div>}
+        </div>
+        
+        {devMode && isRemote && iceState && (
+          <div className={`px-2 py-0.5 rounded bg-black/60 text-[8px] font-mono uppercase tracking-widest border border-white/10 ${
+            iceState === 'connected' || iceState === 'completed' ? 'text-green-400' : 
+            iceState === 'failed' || iceState === 'disconnected' ? 'text-red-400' : 'text-amber-400'
+          }`}>
+            ICE: {iceState}
+          </div>
+        )}
       </div>
       <div className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity z-10">
         <button onClick={handleToggleFullscreen} className="p-2 bg-black/40 backdrop-blur-md rounded-full text-white/60 hover:text-white transition-colors ring-1 ring-white/5 shadow-lg" title="Toggle Fullscreen">
