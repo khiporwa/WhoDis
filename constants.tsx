@@ -109,7 +109,6 @@ export const APP_CONFIG = {
   BLUR_DURATION_MS: 5000,
   
   // WebRTC Configuration
-  // To fix Mobile Data (4G/5G) connectivity, we add a public relay candidate.
   ICE_SERVERS: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
@@ -117,8 +116,6 @@ export const APP_CONFIG = {
     { urls: 'stun:stun3.l.google.com:19302' },
     { urls: 'stun:stun4.l.google.com:19302' },
     { urls: 'stun:global.stun.twilio.com:3478' },
-    
-    // Public fallback candidate - helpful for symmetric NAT (Mobile Data)
     { urls: 'stun:stun.relay.metered.ca:80' }
   ],
 
@@ -143,6 +140,27 @@ export const APP_CONFIG = {
 };
 
 export const Icons = {
+  Logo: ({ size = 24, className = "" }: { size?: number, className?: string }) => (
+    <svg 
+      width={size} 
+      height={size} 
+      viewBox="0 0 32 32" 
+      fill="none" 
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+    >
+      <defs>
+        <linearGradient id="logo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style={{ stopColor: "#06b6d4" }} />
+          <stop offset="100%" style={{ stopColor: "#3b82f6" }} />
+        </linearGradient>
+      </defs>
+      <rect width="28" height="24" x="2" y="2" rx="6" fill="url(#logo-grad)" />
+      <path d="M10 26l4-4h8a6 6 0 0 0 6-6V8a6 6 0 0 0-6-6H8a6 6 0 0 0-6 6v8a6 6 0 0 0 6 6z" fill="url(#logo-grad)" />
+      <rect width="4" height="2" x="8" y="11" rx="1" fill="white" />
+      <rect width="4" height="2" x="20" y="11" rx="1" fill="white" />
+    </svg>
+  ),
   Video: () => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.934a.5.5 0 0 0-.777-.416L16 11"/><rect width="14" height="12" x="2" y="6" rx="2"/></svg>
   ),
