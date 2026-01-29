@@ -116,7 +116,7 @@ export const ChatSession: React.FC = () => {
 
   const handleLogoClick = () => {
     const newClicks = logoClicks + 1;
-    if (newClicks >= 20) {
+    if (newClicks >= 5) {
       setDevMode(!devMode);
       setLogoClicks(0);
     } else {
@@ -299,7 +299,7 @@ export const ChatSession: React.FC = () => {
           <div className="flex-none flex items-center justify-center gap-4 py-2 h-20">
             <div className={`flex items-center gap-2 px-2 rounded-2xl border h-full ${themeData.isLight ? 'bg-neutral-100/80 border-neutral-200' : 'bg-neutral-900/50 border-white/5'}`}>
               <button onClick={toggleAudio} className={`p-3 rounded-xl transition-all ${isMuted ? 'bg-red-500/20 text-red-500' : 'text-neutral-400 hover:text-neutral-900 hover:bg-neutral-200 dark:hover:text-white dark:hover:bg-white/5'}`}>
-                <Icons.Settings />
+                {isMuted ? <Icons.MicOff /> : <Icons.Mic />}
               </button>
               <button onClick={toggleVideo} className={`p-3 rounded-xl transition-all ${isVideoOff ? 'bg-red-500/20 text-red-500' : 'text-neutral-400 hover:text-neutral-900 hover:bg-neutral-200 dark:hover:text-white dark:hover:bg-white/5'}`}>
                 <Icons.Video />
