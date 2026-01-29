@@ -33,7 +33,7 @@ export const LandingPage: React.FC = () => {
 
   const handleLogoClick = () => {
     const newClicks = logoClicks + 1;
-    if (newClicks >= 10) {
+    if (newClicks >= 20) {
       setDevMode(!devMode);
       setLogoClicks(0);
     } else {
