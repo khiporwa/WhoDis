@@ -77,17 +77,16 @@ export const THEMES: Record<string, ThemeConfig> = {
 const getSignalingUrl = () => {
   const { hostname, protocol, port, origin } = window.location;
 
+  // Check Vite environment variable first
   const viteUrl = (import.meta as any).env?.VITE_API_URL;
   if (viteUrl) return viteUrl.replace(/\/$/, "");
 
+  // Local development
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
     return `${protocol}//${hostname}:5000`;
   }
 
-  if (hostname.includes('5173')) {
-    return `${protocol}//${hostname.replace('5173', '5000')}`;
-  }
-
+  // Handle common proxy/tunnel patterns (like IDX or Codespaces)
   if (hostname.includes('.scf.usercontent.goog') || hostname.includes('webcontainer-api.io')) {
     if (!hostname.startsWith('5000-') && !hostname.startsWith('5173-')) {
       return `${protocol}//5000-${hostname}`;
@@ -97,10 +96,7 @@ const getSignalingUrl = () => {
     }
   }
 
-  if (port === '5173') {
-     return `${protocol}//${hostname}:5000`;
-  }
-
+  // Fallback to current origin (useful for Heroku/Render/Vercel single-domain deployments)
   return origin;
 };
 
@@ -108,15 +104,22 @@ export const APP_CONFIG = {
   ICEBREAKER_SILENCE_TIMEOUT: 10000,
   BLUR_DURATION_MS: 5000,
   
-  // WebRTC Configuration
+  // Robust WebRTC Configuration
   ICE_SERVERS: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
     { urls: 'stun:stun3.l.google.com:19302' },
     { urls: 'stun:stun4.l.google.com:19302' },
-    { urls: 'stun:global.stun.twilio.com:3478' },
-    { urls: 'stun:stun.relay.metered.ca:80' }
+    { urls: 'stun:stun.services.mozilla.com' },
+    { urls: 'stun:stun.ekiga.net' },
+    { urls: 'stun:stun.ideasip.com' },
+    { urls: 'stun:stun.rixtelecom.se' },
+    { urls: 'stun:stun.schlund.de' },
+    { urls: 'stun:stun.voiparound.com' },
+    { urls: 'stun:stun.voipbuster.com' },
+    { urls: 'stun:stun.voipstunt.com' },
+    { urls: 'stun:stun.voxgratia.org' }
   ],
 
   ALLOW_SIMULATION: true,
@@ -165,7 +168,7 @@ export const Icons = {
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.934a.5.5 0 0 0-.777-.416L16 11"/><rect width="14" height="12" x="2" y="6" rx="2"/></svg>
   ),
   VideoOff: () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m2 2 20 20"/><path d="M10.66 6H14a2 2 0 0 1 2 2v2.5l5.223-3.482a.5.5 0 0 1 .777.416v8.132a.5.5 0 0 1-.777.416L16 13.5V14a2 2 0 0 1-.1 1.03"/><rect width="14" height="12" x="2" y="6" rx="2" style={{ display: 'none' }} /><path d="M16 16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2.5"/><path d="m2 2 20 20"/></svg>
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 2l20 20"/><path d="M10.66 6H14a2 2 0 0 1 2 2v2.5l5.223-3.482a.5.5 0 0 1 .777.416v8.132a.5.5 0 0 1-.777.416L16 13.5V14a2 2 0 0 1-.1 1.03"/><path d="M16 16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2.5"/></svg>
   ),
   Mic: () => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
