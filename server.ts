@@ -196,30 +196,77 @@ const broadcastOnlineCount = () => {
 
 io.on('connection', (socket) => {
   broadcastOnlineCount();
+  
   socket.on('join-matchmaking', (criteria: UserCriteria) => {
+    // Remove existing entry for this socket if any
     waitingPool = waitingPool.filter(u => u.socket.connected && u.socket.id !== socket.id);
+    
     const newUser: WaitingUser = { socket, criteria, timestamp: Date.now() };
     const match = findBestMatch(newUser);
+    
     if (match) {
+      console.log(`[Matchmaking] Pairing ${socket.id} with ${match.socket.id}`);
+      
+      // Remove candidate from pool
       waitingPool = waitingPool.filter(u => u.socket.id !== match.socket.id);
+      
       const roomId = `room_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+      
+      // CRITICAL: Both sockets MUST join the room to receive signaling messages
+      socket.join(roomId);
+      match.socket.join(roomId);
+      
+      // Emit events
       match.socket.emit('match-found', { roomId, isInitiator: true, partner: criteria });
       socket.emit('match-found', { roomId, isInitiator: false, partner: match.criteria });
     } else {
+      console.log(`[Matchmaking] Added ${socket.id} to pool. Pool size: ${waitingPool.length + 1}`);
       waitingPool.push(newUser);
     }
   });
-  socket.on('signal', (data) => socket.to(data.roomId).emit('signal', data));
-  socket.on('chat-message', (data) => socket.to(data.roomId).emit('chat-message', data));
-  socket.on('typing', (data) => socket.to(data.roomId).emit('typing', data));
-  socket.on('leave-match', (roomId) => {
-    socket.to(roomId).emit('partner-disconnected');
-    socket.leave(roomId);
+
+  socket.on('signal', (data) => {
+    if (data.roomId) {
+      socket.to(data.roomId).emit('signal', data);
+    }
   });
+
+  socket.on('chat-message', (data) => {
+    if (data.roomId) {
+      socket.to(data.roomId).emit('chat-message', data);
+    }
+  });
+
+  socket.on('typing', (data) => {
+    if (data.roomId) {
+      socket.to(data.roomId).emit('typing', data);
+    }
+  });
+
+  socket.on('leave-match', (roomId) => {
+    if (roomId) {
+      socket.to(roomId).emit('partner-disconnected');
+      socket.leave(roomId);
+    }
+  });
+
   socket.on('disconnect', () => {
     waitingPool = waitingPool.filter(u => u.socket.id !== socket.id);
     broadcastOnlineCount();
   });
+});
+
+// Handle server startup errors (specifically EADDRINUSE for macOS users)
+httpServer.on('error', (e: any) => {
+  if (e.code === 'EADDRINUSE') {
+    console.error('\n❌ ERROR: Port 5000 is already in use.');
+    console.error('👉 If you are on a Mac, this is likely "AirPlay Receiver".');
+    console.error('👉 FIX: System Settings > General > AirPlay & Handoff > Turn OFF AirPlay Receiver.');
+    console.error('👉 OR: Run `kill -9 $(lsof -ti:5000)` in terminal.\n');
+    process.exit(1);
+  } else {
+    console.error('❌ Server Error:', e);
+  }
 });
 
 httpServer.listen(PORT, '0.0.0.0', () => {
