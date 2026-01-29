@@ -77,22 +77,17 @@ export const THEMES: Record<string, ThemeConfig> = {
 const getSignalingUrl = () => {
   const { hostname, protocol, port, origin } = window.location;
 
-  // 1. Explicit Environment Variable Override (Production)
-  const env = (import.meta as any).env;
-  if (env?.VITE_API_URL) return env.VITE_API_URL.replace(/\/$/, "");
+  const viteUrl = (import.meta as any).env?.VITE_API_URL;
+  if (viteUrl) return viteUrl.replace(/\/$/, "");
 
-  // 2. Localhost Detection (Standard npm run dev)
-  // If we're on localhost:5173, the backend is on localhost:5000
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
     return `${protocol}//${hostname}:5000`;
   }
 
-  // 3. Handle Cloud IDE Subdomain Port Mapping (e.g., project-5173.hash.goog)
   if (hostname.includes('5173')) {
     return `${protocol}//${hostname.replace('5173', '5000')}`;
   }
 
-  // 4. Special handling for scf.usercontent.goog (Google Cloud Shell / WebContainer)
   if (hostname.includes('.scf.usercontent.goog') || hostname.includes('webcontainer-api.io')) {
     if (!hostname.startsWith('5000-') && !hostname.startsWith('5173-')) {
       return `${protocol}//5000-${hostname}`;
@@ -102,23 +97,32 @@ const getSignalingUrl = () => {
     }
   }
 
-  // 5. General Fallback: If we are explicitly on port 5173, target 5000
   if (port === '5173') {
      return `${protocol}//${hostname}:5000`;
   }
 
-  // 6. Production Fallback (same origin)
   return origin;
 };
 
 export const APP_CONFIG = {
   ICEBREAKER_SILENCE_TIMEOUT: 10000,
   BLUR_DURATION_MS: 5000,
-  STUN_SERVERS: [
+  
+  // Updated ICE Servers for production stability
+  // These help devices find each other across different networks (WiFi/4G/5G)
+  ICE_SERVERS: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' }
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    // Public free TURN relay (Optional/Recommended for Symmetric NAT)
+    // For production, you should eventually use a service like Twilio or Xirsys
+    {
+      urls: 'stun:stun.relay.metered.ca:80'
+    }
   ],
+
   ALLOW_SIMULATION: true,
   
   SIMULATION_LIBRARY: [

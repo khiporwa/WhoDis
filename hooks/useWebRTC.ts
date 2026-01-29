@@ -69,7 +69,11 @@ export const useWebRTC = () => {
   }, []);
 
   const createPeerConnection = async (roomId: string, isInitiator: boolean) => {
-    const pc = new RTCPeerConnection({ iceServers: APP_CONFIG.STUN_SERVERS });
+    // Correctly using the updated ICE_SERVERS list
+    const pc = new RTCPeerConnection({ 
+      iceServers: APP_CONFIG.ICE_SERVERS,
+      iceTransportPolicy: 'all' // Ensure we try both direct and relay connections
+    });
     peerConnection.current = pc;
 
     if (localStreamRef.current) {
@@ -91,6 +95,7 @@ export const useWebRTC = () => {
     };
 
     pc.oniceconnectionstatechange = () => {
+      console.log('ICE Connection State:', pc.iceConnectionState);
       if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
         cleanup();
         setConnectionState('matching');
@@ -128,7 +133,6 @@ export const useWebRTC = () => {
     setConnectionState('matching');
     socketRef.current?.emit('join-matchmaking', {
       interests: user.interests,
-      // Gender is intentionally ignored for matching, but can be sent as metadata
       gender: user.gender
     });
   }, [user.interests, user.gender]);
