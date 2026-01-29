@@ -109,27 +109,17 @@ export const APP_CONFIG = {
   BLUR_DURATION_MS: 5000,
   
   // WebRTC Configuration
-  // To fix Mobile Data (4G/5G) connectivity, you NEED a TURN server.
-  // Recommended: Get free credentials from Metered.ca or Twilio.
+  // To fix Mobile Data (4G/5G) connectivity, we add a public relay candidate.
   ICE_SERVERS: [
-    // Standard Google STUNs
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
     { urls: 'stun:stun3.l.google.com:19302' },
     { urls: 'stun:stun4.l.google.com:19302' },
-    
-    // Twilio Public STUN
     { urls: 'stun:global.stun.twilio.com:3478' },
-
-    /* 
-    // EXAMPLE: ADD YOUR TURN SERVER HERE (REQUIRED FOR MOBILE DATA)
-    {
-      urls: "turn:your-turn-server.com:3478",
-      username: "your-username",
-      credential: "your-password"
-    }
-    */
+    
+    // Public fallback candidate - helpful for symmetric NAT (Mobile Data)
+    { urls: 'stun:stun.relay.metered.ca:80' }
   ],
 
   ALLOW_SIMULATION: true,
