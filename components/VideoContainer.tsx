@@ -1,6 +1,6 @@
 
 import React, { useEffect, useRef, useState } from 'react';
-import { APP_CONFIG, UI_TEXT } from '../constants';
+import { APP_CONFIG, UI_TEXT, Icons } from '../constants';
 import { useAppStore } from '../store/useAppStore';
 
 interface VideoContainerProps {
@@ -77,15 +77,15 @@ export const VideoContainer: React.FC<VideoContainerProps> = ({
         muted={muted} 
         crossOrigin="anonymous"
         data-remote={isRemote ? "true" : "false"} 
-        className={`w-full h-full object-cover transition-all duration-[5000ms] ease-out will-change-[filter] ${isBlurring ? 'blur-[40px]' : 'blur-0'} ${showPlaceholder ? 'hidden' : 'block'}`} 
+        className={`w-full h-full object-cover transition-all duration-[5000ms] ease-out will-change-[filter,transform] ${isBlurring ? 'blur-[40px]' : 'blur-0'} ${showPlaceholder ? 'hidden' : 'block'} ${!isRemote ? '-scale-x-100' : ''}`} 
       />
       {showPlaceholder && (
         <div className="flex items-center justify-center w-full h-full text-neutral-600 bg-neutral-900 absolute inset-0">
           <div className="animate-pulse flex flex-col items-center gap-3">
             <div className="w-16 h-16 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-500">
-              {isVideoOff ? <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m2 2 20 20"/><path d="M10 11.145V14l5.255 2.628"/><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3h8"/><path d="M3 7v10"/><path d="M21 7v10"/></svg> : <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>}
+              {isVideoOff ? <Icons.VideoOff /> : <Icons.Video />}
             </div>
-            <span className="text-[10px] uppercase tracking-[0.2em] font-bold opacity-50">
+            <span className="text-[10px] uppercase tracking-[0.2em] font-bold opacity-50 text-center px-4">
               {isVideoOff ? UI_TEXT.chat.cameraDisabled : UI_TEXT.chat.signalLost}
             </span>
           </div>
