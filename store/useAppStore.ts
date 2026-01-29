@@ -1,148 +1,211 @@
 
-import { create } from 'zustand';
-import { persist, createJSONStorage, StateStorage } from 'zustand/middleware';
-import { UserProfile, UserGender, ChatMode } from '../types';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { io, Socket } from 'socket.io-client';
+import { APP_CONFIG } from '../constants';
+import { useAppStore } from '../store/useAppStore';
 
-export type ThemeType = 'midnight' | 'cyber' | 'forest' | 'volcano' | 'ocean' | 'gold' | 'daylight';
-
-interface AppState {
-  user: UserProfile;
-  isLoggedIn: boolean;
-  authModalOpen: boolean;
-  selectedMode: ChatMode | null;
-  isMatching: boolean;
-  safetyBlurEnabled: boolean;
-  onlineCount: number;
-  currentTheme: ThemeType;
-  // Dev-only features
-  devMode: boolean;
-  safetyScreenshotsEnabled: boolean;
-  screenshotIntervalMin: number; // in milliseconds
-  screenshotIntervalMax: number; // in milliseconds
+export const useWebRTC = () => {
+  const [localStream, setLocalStreamState] = useState<MediaStream | null>(null);
+  const [remoteStream, setRemoteStreamState] = useState<MediaStream | null>(null);
+  const [simulatedVideoUrl, setSimulatedVideoUrl] = useState<string | null>(null);
+  const [connectionState, setConnectionState] = useState<'idle' | 'matching' | 'connecting' | 'connected'>('idle');
+  const [isMuted, setIsMuted] = useState(false);
+  const [isVideoOff, setIsVideoOff] = useState(false);
+  const [partnerData, setPartnerData] = useState<any>(null);
   
-  // Actions
-  setUser: (user: Partial<UserProfile>) => void;
-  setMode: (mode: ChatMode | null) => void;
-  setIsMatching: (val: boolean) => void;
-  setSafetyBlur: (enabled: boolean) => void;
-  setAuthModalOpen: (open: boolean) => void;
-  setDevMode: (enabled: boolean) => void;
-  setSafetyScreenshotsEnabled: (enabled: boolean) => void;
-  setScreenshotIntervals: (min: number, max: number) => void;
-  setOnlineCount: (count: number) => void;
-  setTheme: (theme: ThemeType) => void;
-  login: (email: string, name: string) => void;
-  signup: (email: string, name: string) => void;
-  logout: () => void;
-  addInterest: (interest: string) => void;
-  removeInterest: (interest: string) => void;
-}
+  const socketRef = useRef<Socket | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const peerConnection = useRef<RTCPeerConnection | null>(null);
+  const roomIdRef = useRef<string | null>(null);
 
-const generateId = () => Math.random().toString(36).substring(2, 15);
+  const { user } = useAppStore();
 
-const hybridStorage: StateStorage = {
-  getItem: (name: string): string | null => {
-    return localStorage.getItem(name) || sessionStorage.getItem(name);
-  },
-  setItem: (name: string, value: string): void => {
-    const parsed = JSON.parse(value);
-    if (parsed.state.isLoggedIn) {
-      localStorage.setItem(name, value);
-      sessionStorage.removeItem(name);
-    } else {
-      sessionStorage.setItem(name, value);
-      localStorage.removeItem(name);
+  // Initialize Socket
+  useEffect(() => {
+    socketRef.current = io(APP_CONFIG.SIGNALLING_URL);
+    
+    socketRef.current.on('match-found', async ({ roomId, isInitiator, partner }) => {
+      console.log('Match Found!', roomId, isInitiator);
+      roomIdRef.current = roomId;
+      setPartnerData(partner);
+      setConnectionState('connecting');
+      
+      if (isInitiator) {
+        await createPeerConnection(roomId, true);
+      }
+    });
+
+    socketRef.current.on('signal', async (data) => {
+      if (!peerConnection.current) {
+        await createPeerConnection(data.roomId, false);
+      }
+      
+      if (data.signal.type === 'offer') {
+        await peerConnection.current?.setRemoteDescription(new RTCSessionDescription(data.signal));
+        const answer = await peerConnection.current?.createAnswer();
+        await peerConnection.current?.setLocalDescription(answer!);
+        socketRef.current?.emit('signal', { roomId: data.roomId, signal: peerConnection.current?.localDescription });
+      } else if (data.signal.type === 'answer') {
+        await peerConnection.current?.setRemoteDescription(new RTCSessionDescription(data.signal));
+      } else if (data.signal.candidate) {
+        try {
+          await peerConnection.current?.addIceCandidate(new RTCIceCandidate(data.signal));
+        } catch (e) {
+          console.error('Error adding received ice candidate', e);
+        }
+      }
+    });
+
+    socketRef.current.on('partner-disconnected', () => {
+      cleanup();
+      setConnectionState('matching');
+      // Re-join matchmaking automatically
+      startMatchmaking();
+    });
+
+    return () => {
+      socketRef.current?.disconnect();
+    };
+  }, []);
+
+  const createPeerConnection = async (roomId: string, isInitiator: boolean) => {
+    // Explicitly requesting ICE servers and transport policy 'all' for maximum compatibility
+    const pc = new RTCPeerConnection({ 
+      iceServers: APP_CONFIG.ICE_SERVERS,
+      iceTransportPolicy: 'all',
+      bundlePolicy: 'max-bundle'
+    });
+    peerConnection.current = pc;
+
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => {
+        pc.addTrack(track, localStreamRef.current!);
+      });
     }
-  },
-  removeItem: (name: string): void => {
-    localStorage.removeItem(name);
-    sessionStorage.removeItem(name);
-  },
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        socketRef.current?.emit('signal', { roomId, signal: event.candidate });
+      }
+    };
+
+    pc.ontrack = (event) => {
+      console.log('Received Remote Track');
+      setRemoteStreamState(event.streams[0]);
+      setConnectionState('connected');
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      console.log('ICE Connection State:', pc.iceConnectionState);
+      if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+        cleanup();
+        setConnectionState('matching');
+        startMatchmaking();
+      }
+    };
+
+    if (isInitiator) {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socketRef.current?.emit('signal', { roomId, signal: pc.localDescription });
+    }
+
+    return pc;
+  };
+
+  const startLocalStream = useCallback(async (video: boolean = true) => {
+    if (localStreamRef.current) return localStreamRef.current;
+    
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: video ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } : false,
+        audio: true
+      });
+      localStreamRef.current = stream;
+      setLocalStreamState(stream);
+      return stream;
+    } catch (err) {
+      console.error("Error accessing media devices:", err);
+      return null;
+    }
+  }, []);
+
+  const startMatchmaking = useCallback(() => {
+    setConnectionState('matching');
+    socketRef.current?.emit('join-matchmaking', {
+      interests: user.interests,
+      gender: user.gender
+    });
+  }, [user.interests, user.gender]);
+
+  const startSimulation = useCallback((videoUrl: string) => {
+    setSimulatedVideoUrl(videoUrl);
+    setConnectionState('connected');
+  }, []);
+
+  const toggleAudio = useCallback(() => {
+    if (localStreamRef.current) {
+      const audioTrack = localStreamRef.current.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !audioTrack.enabled;
+        setIsMuted(!audioTrack.enabled);
+      }
+    }
+  }, []);
+
+  const toggleVideo = useCallback(() => {
+    if (localStreamRef.current) {
+      const videoTrack = localStreamRef.current.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.enabled = !videoTrack.enabled;
+        setIsVideoOff(!videoTrack.enabled);
+      }
+    }
+  }, []);
+
+  const cleanup = useCallback(() => {
+    if (peerConnection.current) {
+      peerConnection.current.close();
+      peerConnection.current = null;
+    }
+    if (roomIdRef.current) {
+      socketRef.current?.emit('leave-match', roomIdRef.current);
+      roomIdRef.current = null;
+    }
+    setRemoteStreamState(null);
+    setSimulatedVideoUrl(null);
+    setPartnerData(null);
+    setConnectionState('idle');
+  }, []);
+
+  const stopTracks = useCallback(() => {
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => track.stop());
+      localStreamRef.current = null;
+      setLocalStreamState(null);
+      setIsMuted(false);
+      setIsVideoOff(false);
+    }
+    cleanup();
+  }, [cleanup]);
+
+  return {
+    localStream,
+    remoteStream,
+    simulatedVideoUrl,
+    connectionState,
+    isMuted,
+    isVideoOff,
+    partnerData,
+    socket: socketRef.current,
+    roomId: roomIdRef.current,
+    setConnectionState,
+    startLocalStream,
+    startMatchmaking,
+    startSimulation,
+    stopTracks,
+    cleanup,
+    toggleAudio,
+    toggleVideo,
+  };
 };
-
-export const useAppStore = create<AppState>()(
-  persist(
-    (set) => ({
-      user: {
-        id: generateId(),
-        isGuest: true,
-        interests: [],
-        gender: UserGender.ANY,
-      },
-      isLoggedIn: false,
-      authModalOpen: false,
-      selectedMode: null,
-      isMatching: false,
-      safetyBlurEnabled: true,
-      onlineCount: 1,
-      currentTheme: 'midnight',
-      devMode: false,
-      safetyScreenshotsEnabled: true,
-      screenshotIntervalMin: 8000, // Reduced from 15s to 8s for more immediate testing
-      screenshotIntervalMax: 20000, // Reduced from 45s to 20s
-
-      setUser: (data) => set((state) => ({ user: { ...state.user, ...data } })),
-      setMode: (mode) => set({ selectedMode: mode }),
-      setIsMatching: (val) => set({ isMatching: val }),
-      setSafetyBlur: (enabled) => set({ safetyBlurEnabled: enabled }),
-      setAuthModalOpen: (open) => set({ authModalOpen: open }),
-      setDevMode: (enabled) => set({ devMode: enabled }),
-      setSafetyScreenshotsEnabled: (enabled) => set({ safetyScreenshotsEnabled: enabled }),
-      setScreenshotIntervals: (min, max) => set({ screenshotIntervalMin: min, screenshotIntervalMax: max }),
-      setOnlineCount: (count) => set({ onlineCount: count }),
-      setTheme: (theme) => set({ currentTheme: theme }),
-      
-      login: (email, name) => {
-        const isAdmin = email === 'khiteshjain09@gmail.com';
-        set((state) => ({
-          isLoggedIn: true,
-          authModalOpen: false,
-          devMode: isAdmin ? true : state.devMode,
-          user: { ...state.user, email, name, isGuest: false }
-        }));
-      },
-      
-      signup: (email, name) => set((state) => ({
-        isLoggedIn: true,
-        authModalOpen: false,
-        user: { ...state.user, email, name, isGuest: false }
-      })),
-
-      logout: () => {
-        localStorage.removeItem('whodis-storage');
-        sessionStorage.removeItem('whodis-storage');
-        set({
-          isLoggedIn: false,
-          devMode: false,
-          user: {
-            id: generateId(),
-            isGuest: true,
-            interests: [],
-            gender: UserGender.ANY,
-          }
-        });
-      },
-
-      addInterest: (interest) => set((state) => ({
-        user: { ...state.user, interests: [...new Set([...state.user.interests, interest])] }
-      })),
-      removeInterest: (interest) => set((state) => ({
-        user: { ...state.user, interests: state.user.interests.filter(i => i !== interest) }
-      })),
-    }),
-    {
-      name: 'whodis-storage',
-      storage: createJSONStorage(() => hybridStorage),
-      partialize: (state) => ({ 
-        user: state.user,
-        isLoggedIn: state.isLoggedIn,
-        safetyBlurEnabled: state.safetyBlurEnabled,
-        devMode: state.devMode,
-        safetyScreenshotsEnabled: state.safetyScreenshotsEnabled,
-        screenshotIntervalMin: state.screenshotIntervalMin,
-        screenshotIntervalMax: state.screenshotIntervalMax,
-        currentTheme: state.currentTheme
-      }),
-    }
-  )
-);

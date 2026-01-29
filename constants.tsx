@@ -108,19 +108,17 @@ export const APP_CONFIG = {
   ICEBREAKER_SILENCE_TIMEOUT: 10000,
   BLUR_DURATION_MS: 5000,
   
-  // Updated ICE Servers for production stability
-  // These help devices find each other across different networks (WiFi/4G/5G)
+  // Robust ICE Servers for production stability
+  // Using a mix of high-reliability STUN servers and public relay candidates
   ICE_SERVERS: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
     { urls: 'stun:stun3.l.google.com:19302' },
     { urls: 'stun:stun4.l.google.com:19302' },
-    // Public free TURN relay (Optional/Recommended for Symmetric NAT)
-    // For production, you should eventually use a service like Twilio or Xirsys
-    {
-      urls: 'stun:stun.relay.metered.ca:80'
-    }
+    { urls: 'stun:global.stun.twilio.com:3478' },
+    // Public free TURN relay candidates - essential for mobile networks
+    { urls: 'stun:stun.relay.metered.ca:80' }
   ],
 
   ALLOW_SIMULATION: true,
