@@ -1,8 +1,8 @@
 
 export const UI_TEXT = {
   "common": {
-    "siteName": "WhoDis",
-    "siteNamePrefix": "Who",
+    "siteName": "WhosDis",
+    "siteNamePrefix": "Whos",
     "siteNameSuffix": "Dis",
     "loading": "Loading...",
     "report": "Report",
