@@ -9,6 +9,7 @@ export const useWebRTC = () => {
   const [remoteStream, setRemoteStreamState] = useState<MediaStream | null>(null);
   const [simulatedVideoUrl, setSimulatedVideoUrl] = useState<string | null>(null);
   const [connectionState, setConnectionState] = useState<'idle' | 'matching' | 'connecting' | 'connected'>('idle');
+  const [iceState, setIceState] = useState<string>('new');
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [partnerData, setPartnerData] = useState<any>(null);
@@ -25,41 +26,41 @@ export const useWebRTC = () => {
     socketRef.current = io(APP_CONFIG.SIGNALLING_URL);
     
     socketRef.current.on('match-found', async ({ roomId, isInitiator, partner }) => {
-      console.log('Match Found!', roomId, isInitiator);
+      console.log('[WebRTC] Match Found!', roomId, isInitiator);
       roomIdRef.current = roomId;
       setPartnerData(partner);
       setConnectionState('connecting');
       
-      if (isInitiator) {
-        await createPeerConnection(roomId, true);
-      }
+      // Crucial: Wait a small moment to ensure localStreamRef is populated if just started
+      await createPeerConnection(roomId, isInitiator);
     });
 
     socketRef.current.on('signal', async (data) => {
       if (!peerConnection.current) {
-        await createPeerConnection(data.roomId, false);
+        console.warn('[WebRTC] Signal received but no PeerConnection exists yet.');
+        return;
       }
       
-      if (data.signal.type === 'offer') {
-        await peerConnection.current?.setRemoteDescription(new RTCSessionDescription(data.signal));
-        const answer = await peerConnection.current?.createAnswer();
-        await peerConnection.current?.setLocalDescription(answer!);
-        socketRef.current?.emit('signal', { roomId: data.roomId, signal: peerConnection.current?.localDescription });
-      } else if (data.signal.type === 'answer') {
-        await peerConnection.current?.setRemoteDescription(new RTCSessionDescription(data.signal));
-      } else if (data.signal.candidate) {
-        try {
-          await peerConnection.current?.addIceCandidate(new RTCIceCandidate(data.signal));
-        } catch (e) {
-          console.error('Error adding received ice candidate', e);
+      try {
+        if (data.signal.type === 'offer') {
+          await peerConnection.current.setRemoteDescription(new RTCSessionDescription(data.signal));
+          const answer = await peerConnection.current.createAnswer();
+          await peerConnection.current.setLocalDescription(answer);
+          socketRef.current?.emit('signal', { roomId: data.roomId, signal: peerConnection.current.localDescription });
+        } else if (data.signal.type === 'answer') {
+          await peerConnection.current.setRemoteDescription(new RTCSessionDescription(data.signal));
+        } else if (data.signal.candidate) {
+          await peerConnection.current.addIceCandidate(new RTCIceCandidate(data.signal.candidate || data.signal));
         }
+      } catch (e) {
+        console.error('[WebRTC] Signaling Error:', e);
       }
     });
 
     socketRef.current.on('partner-disconnected', () => {
+      console.log('[WebRTC] Partner disconnected');
       cleanup();
       setConnectionState('matching');
-      // Re-join matchmaking automatically
       startMatchmaking();
     });
 
@@ -69,13 +70,20 @@ export const useWebRTC = () => {
   }, []);
 
   const createPeerConnection = async (roomId: string, isInitiator: boolean) => {
-    // Correctly using the updated ICE_SERVERS list
+    if (peerConnection.current) {
+      peerConnection.current.close();
+    }
+
     const pc = new RTCPeerConnection({ 
       iceServers: APP_CONFIG.ICE_SERVERS,
-      iceTransportPolicy: 'all' // Ensure we try both direct and relay connections
+      iceTransportPolicy: 'all',
+      bundlePolicy: 'max-bundle'
     });
+    
     peerConnection.current = pc;
+    setIceState(pc.iceConnectionState);
 
+    // Add local tracks
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => {
         pc.addTrack(track, localStreamRef.current!);
@@ -89,24 +97,36 @@ export const useWebRTC = () => {
     };
 
     pc.ontrack = (event) => {
-      console.log('Received Remote Track');
+      console.log('[WebRTC] Received Remote Track');
       setRemoteStreamState(event.streams[0]);
       setConnectionState('connected');
     };
 
     pc.oniceconnectionstatechange = () => {
-      console.log('ICE Connection State:', pc.iceConnectionState);
-      if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
-        cleanup();
-        setConnectionState('matching');
-        startMatchmaking();
+      const state = pc.iceConnectionState;
+      setIceState(state);
+      console.log('[WebRTC] ICE State Changed:', state);
+      
+      if (state === 'connected' || state === 'completed') {
+        setConnectionState('connected');
+      } else if (state === 'disconnected' || state === 'failed' || state === 'closed') {
+        // Only trigger rematching if we were previously connected
+        if (connectionState === 'connected' || connectionState === 'connecting') {
+           cleanup();
+           setConnectionState('matching');
+           startMatchmaking();
+        }
       }
     };
 
     if (isInitiator) {
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      socketRef.current?.emit('signal', { roomId, signal: pc.localDescription });
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socketRef.current?.emit('signal', { roomId, signal: pc.localDescription });
+      } catch (e) {
+        console.error('[WebRTC] Offer Creation Error:', e);
+      }
     }
 
     return pc;
@@ -117,14 +137,14 @@ export const useWebRTC = () => {
     
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: video ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } : false,
+        video: video ? { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' } : false,
         audio: true
       });
       localStreamRef.current = stream;
       setLocalStreamState(stream);
       return stream;
     } catch (err) {
-      console.error("Error accessing media devices:", err);
+      console.error("[WebRTC] Error accessing media devices:", err);
       return null;
     }
   }, []);
@@ -175,6 +195,7 @@ export const useWebRTC = () => {
     setSimulatedVideoUrl(null);
     setPartnerData(null);
     setConnectionState('idle');
+    setIceState('new');
   }, []);
 
   const stopTracks = useCallback(() => {
@@ -193,6 +214,7 @@ export const useWebRTC = () => {
     remoteStream,
     simulatedVideoUrl,
     connectionState,
+    iceState,
     isMuted,
     isVideoOff,
     partnerData,
